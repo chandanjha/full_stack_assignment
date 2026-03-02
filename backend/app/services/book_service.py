@@ -12,9 +12,9 @@ from app.providers import (
     build_storage_provider,
 )
 from app.repositories.book_repository import BookRepository
-from app.repositories.loan_repository import LoanRepository
+from app.repositories.book_borrow_repository import BookBorrowRepository
 from app.schemas.book import BookCreate, BookPublic, BookUpdate, validate_book_upload_file
-from app.schemas.library import LoanPublic
+from app.schemas.library import BookBorrowPublic
 
 
 class BookService:
@@ -26,7 +26,7 @@ class BookService:
     ):
         self.db = db
         self.book_repo = BookRepository(db)
-        self.loan_repo = LoanRepository(db)
+        self.book_borrow_repo = BookBorrowRepository(db)
         self.storage = storage or build_storage_provider()
         self.summary_provider = summary_provider or LocalBookSummaryProvider()
 
@@ -68,29 +68,29 @@ class BookService:
         self.storage.delete_book_file(book.file_path)
         await self.book_repo.delete(book)
 
-    async def borrow_book(self, book_id: UUID, current_user: User) -> LoanPublic:
+    async def borrow_book(self, book_id: UUID, current_user: User) -> BookBorrowPublic:
         await self._get_book_or_404(book_id)
-        active_loan = await self.loan_repo.get_active_loan(current_user.id, book_id)
-        if active_loan:
+        active_book_borrow = await self.book_borrow_repo.get_active_book_borrow(current_user.id, book_id)
+        if active_book_borrow:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="You already have this book borrowed",
             )
 
-        loan = await self.loan_repo.create_loan(current_user.id, book_id)
-        return LoanPublic.from_orm_loan(loan)
+        book_borrow = await self.book_borrow_repo.create_book_borrow(current_user.id, book_id)
+        return BookBorrowPublic.from_orm_book_borrow(book_borrow)
 
-    async def return_book(self, book_id: UUID, current_user: User) -> LoanPublic:
+    async def return_book(self, book_id: UUID, current_user: User) -> BookBorrowPublic:
         await self._get_book_or_404(book_id)
-        active_loan = await self.loan_repo.get_active_loan(current_user.id, book_id)
-        if not active_loan:
+        active_book_borrow = await self.book_borrow_repo.get_active_book_borrow(current_user.id, book_id)
+        if not active_book_borrow:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="This book is not currently borrowed by you",
             )
 
-        returned_loan = await self.loan_repo.return_loan(active_loan)
-        return LoanPublic.from_orm_loan(returned_loan)
+        returned_book_borrow = await self.book_borrow_repo.return_book_borrow(active_book_borrow)
+        return BookBorrowPublic.from_orm_book_borrow(returned_book_borrow)
 
     async def generate_summary_from_llm(self, book_id: UUID) -> None:
         book = await self.book_repo.get_book_by_id(book_id)

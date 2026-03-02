@@ -22,7 +22,7 @@ class BookUpdate(BaseModel):
     tags: Optional[list[str]] = None
 
 
-class BookPublic(BaseModel):
+class BookDetail(BaseModel):
     id: str
     title: str
     author: Optional[str] = None

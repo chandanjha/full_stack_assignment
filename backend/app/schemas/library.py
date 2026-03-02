@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from app.schemas.book import BookPublic
 
 
-class LoanPublic(BaseModel):
+class BookBorrowPublic(BaseModel):
     id: str
     user_id: str
     book_id: str
@@ -17,13 +17,13 @@ class LoanPublic(BaseModel):
         from_attributes = True
 
     @classmethod
-    def from_orm_loan(cls, loan):
+    def from_orm_book_borrow(cls, book_borrow):
         return cls(
-            id=str(loan.id),
-            user_id=str(loan.user_id),
-            book_id=str(loan.book_id),
-            borrowed_at=loan.borrowed_at,
-            returned_at=loan.returned_at,
+            id=str(book_borrow.id),
+            user_id=str(book_borrow.user_id),
+            book_id=str(book_borrow.book_id),
+            borrowed_at=book_borrow.borrowed_at,
+            returned_at=book_borrow.returned_at,
         )
 
 

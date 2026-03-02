@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import BookSummaryStatus
 from app.models.user import User
 from app.providers import LocalRecommendationProfileProvider, RecommendationProfileProvider
+from app.repositories.book_borrow_repository import BookBorrowRepository
 from app.repositories.book_repository import BookRepository
-from app.repositories.loan_repository import LoanRepository
 from app.repositories.review_repository import ReviewRepository
 from app.repositories.user_preference_repository import UserPreferenceRepository
 from app.schemas.book import BookPublic
@@ -22,7 +22,7 @@ class RecommendationService:
     ):
         self.db = db
         self.book_repo = BookRepository(db)
-        self.loan_repo = LoanRepository(db)
+        self.book_borrow_repo = BookBorrowRepository(db)
         self.review_repo = ReviewRepository(db)
         self.user_preference_repo = UserPreferenceRepository(db)
         self.recommendation_profile_provider = (
@@ -80,7 +80,10 @@ class RecommendationService:
         preferred_authors = generated_preference.preferred_authors
 
         all_books = await self.book_repo.list_all_books()
-        borrowed_book_ids = {loan.book_id for loan in await self.loan_repo.list_user_loans(current_user.id)}
+        borrowed_book_ids = {
+            book_borrow.book_id
+            for book_borrow in await self.book_borrow_repo.list_user_book_borrows(current_user.id)
+        }
         reviewed_book_ids = {review.book_id for review in await self.review_repo.list_user_reviews(current_user.id)}
         excluded_ids = borrowed_book_ids | reviewed_book_ids
 
@@ -129,14 +132,14 @@ class RecommendationService:
         return recommendations[: max(limit, 1)]
 
     async def _get_user_borrowed_books(self, user_id: UUID):
-        loans = await self.loan_repo.list_user_loans(user_id)
+        book_borrows = await self.book_borrow_repo.list_user_book_borrows(user_id)
         books = []
         seen_ids: set[UUID] = set()
-        for loan in loans:
-            if loan.book_id in seen_ids:
+        for book_borrow in book_borrows:
+            if book_borrow.book_id in seen_ids:
                 continue
-            seen_ids.add(loan.book_id)
-            book = await self.book_repo.get_book_by_id(loan.book_id)
+            seen_ids.add(book_borrow.book_id)
+            book = await self.book_repo.get_book_by_id(book_borrow.book_id)
             if book:
                 books.append(book)
         return books

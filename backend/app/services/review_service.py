@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from app.providers import LocalReviewConsensusProvider, ReviewConsensusProvider
 from app.repositories.book_insight_repository import BookInsightRepository
+from app.repositories.book_borrow_repository import BookBorrowRepository
 from app.repositories.book_repository import BookRepository
-from app.repositories.loan_repository import LoanRepository
 from app.repositories.review_repository import ReviewRepository
 from app.schemas.library import BookInsightPublic, ReviewCreate, ReviewPublic
 
@@ -20,14 +20,14 @@ class ReviewService:
     ):
         self.db = db
         self.book_repo = BookRepository(db)
-        self.loan_repo = LoanRepository(db)
+        self.book_borrow_repo = BookBorrowRepository(db)
         self.review_repo = ReviewRepository(db)
         self.book_insight_repo = BookInsightRepository(db)
         self.review_consensus_provider = review_consensus_provider or LocalReviewConsensusProvider()
 
     async def create_review(self, book_id: UUID, payload: ReviewCreate, current_user: User) -> ReviewPublic:
         await self._get_book_or_404(book_id)
-        if not await self.loan_repo.has_any_loan(current_user.id, book_id):
+        if not await self.book_borrow_repo.has_any_book_borrow(current_user.id, book_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only review books you have borrowed",

@@ -1,6 +1,9 @@
 # Environment files
+
 .env
 backend/.env
+
+# Storage files
 backend/storage/
 
 # Python
@@ -22,6 +25,5 @@ venv/
 # Logs
 *.log
 
-# Node (if frontend exists)
 frontend/node_modules/
 frontend/dist/
