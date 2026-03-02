@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:16
+    container_name: app_db
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppass
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: app_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+  backend:
+    build: ./backend
+    container_name: app_backend
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: appdb
+      DB_USER: appuser
+      DB_PASSWORD: apppass
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: app_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  frontend:
+    build: ./frontend
+    container_name: app_frontend
+    environment:
+      BACKEND_API_BASE_URL: http://backend:8000/api
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      # prevents node_modules from being overwritten by host volume
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  ollama_data:
