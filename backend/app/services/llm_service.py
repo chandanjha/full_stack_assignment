@@ -49,6 +49,19 @@ class LLMService:
         prompt = self._build_preference_prompt(preference_context)
         return self._run_prompt(prompt)
 
+    def rank_content_recommendations(
+        self,
+        reader_profile: str,
+        candidate_catalog: str,
+        limit: int,
+    ) -> str:
+        prompt = self._build_content_recommendation_prompt(
+            reader_profile=reader_profile,
+            candidate_catalog=candidate_catalog,
+            limit=limit,
+        )
+        return self._run_prompt(prompt)
+
     def _run_prompt(self, prompt: str) -> str:
         if self.provider == "ollama":
             return self._summarize_with_ollama(prompt)
@@ -244,4 +257,28 @@ class LLMService:
             "Summarize this reader's preferences in one concise sentence.\n"
             "Focus on favored tags, authors, and reading tendencies.\n\n"
             f"{preference_context}"
+        )
+
+    def _build_content_recommendation_prompt(
+        self,
+        reader_profile: str,
+        candidate_catalog: str,
+        limit: int,
+    ) -> str:
+        safe_limit = max(limit, 1)
+        return (
+            "You are an assistant for a digital library.\n"
+            "Rank candidate books using content-based filtering only.\n"
+            "Use the reader profile plus each book's title, author, tags, and summary.\n"
+            "Do not use popularity, collaborative signals, or any information outside the prompt.\n"
+            "Return only a JSON array with at most "
+            f"{safe_limit} item(s).\n"
+            "Each array item must contain:\n"
+            '- "book_id": a candidate book id exactly as provided\n'
+            '- "score": an integer from 1 to 100\n'
+            '- "reasons": an array of 1 to 3 short strings grounded in content fit\n\n'
+            "Reader Profile:\n"
+            f"{reader_profile}\n\n"
+            "Candidate Books:\n"
+            f"{candidate_catalog}"
         )

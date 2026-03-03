@@ -96,7 +96,7 @@ async def list_books(
     "/recommendations",
     response_model=SuccessResponse[list[RecommendationPublic]],
     status_code=status.HTTP_200_OK,
-    summary="Get personalized book recommendations for the current user",
+    summary="Get GenAI content-based book recommendations for the current user",
 )
 async def recommend_books(
     limit: int = 5,
@@ -104,7 +104,7 @@ async def recommend_books(
     current_user: User = Depends(get_current_user),
 ):
     recommendations = await service.recommend_books(current_user, limit=limit)
-    return SuccessResponse(message="Recommendations generated successfully", data=recommendations)
+    return SuccessResponse(message="GenAI content-based recommendations generated successfully", data=recommendations)
 
 
 @router.get(

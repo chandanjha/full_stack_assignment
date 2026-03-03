@@ -27,3 +27,5 @@ venv/
 
 frontend/node_modules/
 frontend/dist/
+frontend/.next/
+frontend/build/

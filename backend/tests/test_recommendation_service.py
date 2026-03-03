@@ -27,10 +27,11 @@ def make_book(**overrides):
     return SimpleNamespace(**values)
 
 
-def build_service(profile_provider=None):
+def build_service(profile_provider=None, ranking_provider=None):
     return RecommendationService(
         db=SimpleNamespace(),
         recommendation_profile_provider=profile_provider or Mock(),
+        recommendation_ranking_provider=ranking_provider or Mock(),
     )
 
 
@@ -76,6 +77,7 @@ async def test_recommend_books_excludes_read_items_and_keeps_fallbacks():
     preferred = SimpleNamespace(
         preferred_tags=["science"],
         preferred_authors=["Author Match"],
+        preference_summary="Enjoys science books from Author Match.",
     )
     borrowed_book = make_book(
         id=uuid4(),
@@ -98,7 +100,20 @@ async def test_recommend_books_excludes_read_items_and_keeps_fallbacks():
         tags=["poetry"],
         summary_status=BookSummaryStatus.PENDING.value,
     )
-    service = build_service()
+    ranking_provider = Mock()
+    ranking_provider.rank_books.return_value = [
+        {
+            "book_id": str(ranked_book.id),
+            "score": 96,
+            "reasons": ["aligns with science content", "matches preferred author Author Match"],
+        },
+        {
+            "book_id": str(fallback_book.id),
+            "score": 28,
+            "reasons": ["broader adjacent catalog fit"],
+        },
+    ]
+    service = build_service(ranking_provider=ranking_provider)
     service.update_user_preferences = AsyncMock(return_value=preferred)
     service.book_repo = SimpleNamespace(
         list_all_books=AsyncMock(return_value=[borrowed_book, ranked_book, fallback_book]),
@@ -111,9 +126,18 @@ async def test_recommend_books_excludes_read_items_and_keeps_fallbacks():
     result = await service.recommend_books(user, limit=5)
 
     assert [item.book.id for item in result] == [str(ranked_book.id), str(fallback_book.id)]
-    assert result[0].score == 8
-    assert "matches tags: science" in result[0].reasons
-    assert "includes favored author Author Match" in result[0].reasons
-    assert "has generated summary metadata" in result[0].reasons
-    assert result[1].score == 1
-    assert result[1].reasons == ["unread title available for exploration"]
+    assert result[0].score == 96
+    assert result[0].reasons == [
+        "aligns with science content",
+        "matches preferred author Author Match",
+    ]
+    assert result[1].score == 28
+    assert result[1].reasons == ["broader adjacent catalog fit"]
+
+    ranking_provider.rank_books.assert_called_once()
+    ranking_call = ranking_provider.rank_books.call_args.kwargs
+    assert ranking_call["favorite_tags"] == ["science"]
+    assert ranking_call["favorite_authors"] == ["Author Match"]
+    assert ranking_call["preference_summary"] == "Enjoys science books from Author Match."
+    assert ranking_call["limit"] == 5
+    assert [book["title"] for book in ranking_call["candidate_books"]] == ["Top Pick", "Wildcard"]
