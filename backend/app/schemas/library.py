@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.book import BookPublic
+from app.schemas.book import BookDetail
 
 
 class BookBorrowPublic(BaseModel):
@@ -88,6 +88,6 @@ class UserPreferencePublic(BaseModel):
 
 
 class RecommendationPublic(BaseModel):
-    book: BookPublic
+    book: BookDetail
     score: int
     reasons: list[str]

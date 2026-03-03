@@ -10,7 +10,7 @@ from app.repositories.book_borrow_repository import BookBorrowRepository
 from app.repositories.book_repository import BookRepository
 from app.repositories.review_repository import ReviewRepository
 from app.repositories.user_preference_repository import UserPreferenceRepository
-from app.schemas.book import BookPublic
+from app.schemas.book import BookDetail
 from app.schemas.library import RecommendationPublic, UserPreferencePublic
 
 
@@ -112,7 +112,7 @@ class RecommendationService:
             if score <= 0:
                 fallback_recommendations.append(
                     RecommendationPublic(
-                        book=BookPublic.from_orm_book(book),
+                        book=BookDetail.from_orm_book(book),
                         score=1,
                         reasons=["unread title available for exploration"],
                     )
@@ -121,7 +121,7 @@ class RecommendationService:
 
             recommendations.append(
                 RecommendationPublic(
-                    book=BookPublic.from_orm_book(book),
+                    book=BookDetail.from_orm_book(book),
                     score=score,
                     reasons=reasons,
                 )

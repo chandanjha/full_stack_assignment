@@ -12,8 +12,8 @@ from app.api.dependency import (
 from app.models.user import User
 from app.schemas.book import BookCreate, BookDetail, BookUpdate
 from app.schemas.library import (
-    BookInsightPublic,
     BookBorrowPublic,
+    BookInsightPublic,
     RecommendationPublic,
     ReviewCreate,
     ReviewPublic,
@@ -39,11 +39,11 @@ def _parse_tags(raw_tags: str | None) -> list[str]:
 
 
 @router.post(
-        "",
-        response_model=SuccessResponse[BookDetail], 
-        status_code=status.HTTP_201_CREATED, 
-        summary="Upload a new book with its details and file",
-    )
+    "",
+    response_model=SuccessResponse[BookDetail],
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload a new book with its details and file",
+)
 async def create_book(
     background_tasks: BackgroundTasks,
     title: str = Form(...),
@@ -59,18 +59,15 @@ async def create_book(
         current_user,
     )
     background_tasks.add_task(generate_book_summary_job, str(book.id))
-    return SuccessResponse(
-        message="Book uploaded successfully",
-        data=book,
-    )
+    return SuccessResponse(message="Book uploaded successfully", data=book)
 
 
 @router.get(
-        "", 
-        response_model=PaginatedSuccessResponse[BookDetail], 
-        status_code=status.HTTP_200_OK, 
-        summary="List books with pagination",
-    )
+    "",
+    response_model=PaginatedSuccessResponse[BookDetail],
+    status_code=status.HTTP_200_OK,
+    summary="List books with pagination",
+)
 async def list_books(
     page: int = 1,
     page_size: int = 10,
@@ -96,46 +93,40 @@ async def list_books(
 
 
 @router.get(
-        "/recommendations", 
-        response_model=SuccessResponse[list[RecommendationPublic]], 
-        status_code=status.HTTP_200_OK, 
-        summary="Get personalized book recommendations for the current user",
-    )
+    "/recommendations",
+    response_model=SuccessResponse[list[RecommendationPublic]],
+    status_code=status.HTTP_200_OK,
+    summary="Get personalized book recommendations for the current user",
+)
 async def recommend_books(
     limit: int = 5,
     service: RecommendationService = Depends(get_recommendation_service),
     current_user: User = Depends(get_current_user),
 ):
     recommendations = await service.recommend_books(current_user, limit=limit)
-    return SuccessResponse(
-        message="Recommendations generated successfully",
-        data=recommendations,
-    )
+    return SuccessResponse(message="Recommendations generated successfully", data=recommendations)
 
 
 @router.get(
-        "/preferences/me", 
-        response_model=SuccessResponse[UserPreferencePublic], 
-        status_code=status.HTTP_200_OK, 
-        summary="Get the current user's book preferences based on their borrowing and review history",
-    )
+    "/preferences/me",
+    response_model=SuccessResponse[UserPreferencePublic],
+    status_code=status.HTTP_200_OK,
+    summary="Get the current user's book preferences based on their borrowing and review history",
+)
 async def get_my_preferences(
     service: RecommendationService = Depends(get_recommendation_service),
     current_user: User = Depends(get_current_user),
 ):
     preference = await service.get_user_preferences(current_user.id)
-    return SuccessResponse(
-        message="User preferences fetched successfully",
-        data=preference,
-    )
+    return SuccessResponse(message="User preferences fetched successfully", data=preference)
 
 
 @router.put(
-        "/{book_id}", 
-        response_model=SuccessResponse[BookDetail], 
-        status_code=status.HTTP_200_OK, 
-        summary="Update book details (title, author, tags)",
-    )
+    "/{book_id}",
+    response_model=SuccessResponse[BookDetail],
+    status_code=status.HTTP_200_OK,
+    summary="Update book details (title, author, tags)",
+)
 async def update_book(
     book_id: UUID,
     payload: BookUpdate,
@@ -143,35 +134,30 @@ async def update_book(
     _: User = Depends(get_current_user),
 ):
     book = await service.update_book(book_id, payload)
-    return SuccessResponse(
-        message="Book updated successfully",
-        data=book,
-    )
+    return SuccessResponse(message="Book updated successfully", data=book)
 
 
 @router.delete(
-        "/{book_id}", 
-        response_model=SuccessResponse[None], 
-        status_code=status.HTTP_200_OK, summary="Delete a book by its ID",
-    )
+    "/{book_id}",
+    response_model=SuccessResponse[None],
+    status_code=status.HTTP_200_OK,
+    summary="Delete a book by its ID",
+)
 async def delete_book(
     book_id: UUID,
     service: BookService = Depends(get_book_service),
     _: User = Depends(get_current_user),
 ):
     await service.delete_book(book_id)
-    return SuccessResponse(
-        message="Book deleted successfully",
-        data=None,
-    )
+    return SuccessResponse(message="Book deleted successfully", data=None)
 
 
 @router.post(
-        "/{book_id}/borrow", 
-        response_model=SuccessResponse[BookBorrowPublic], 
-        status_code=status.HTTP_200_OK, 
-        summary="Borrow a book by its ID (only if available)"
-    )
+    "/{book_id}/borrow",
+    response_model=SuccessResponse[BookBorrowPublic],
+    status_code=status.HTTP_200_OK,
+    summary="Borrow a book by its ID (only if available)",
+)
 async def borrow_book(
     book_id: UUID,
     background_tasks: BackgroundTasks,
@@ -180,36 +166,30 @@ async def borrow_book(
 ):
     book_borrow = await service.borrow_book(book_id, current_user)
     background_tasks.add_task(update_user_preferences_job, str(current_user.id))
-    return SuccessResponse(
-        message="Book borrowed successfully",
-        data=book_borrow,
-    )
+    return SuccessResponse(message="Book borrowed successfully", data=book_borrow)
 
 
 @router.post(
-        "/{book_id}/return", 
-        response_model=SuccessResponse[BookBorrowPublic], 
-        status_code=status.HTTP_200_OK, 
-        summary="Return a borrowed book by its ID"
-    )
+    "/{book_id}/return",
+    response_model=SuccessResponse[BookBorrowPublic],
+    status_code=status.HTTP_200_OK,
+    summary="Return a borrowed book by its ID",
+)
 async def return_book(
     book_id: UUID,
     service: BookService = Depends(get_book_service),
     current_user: User = Depends(get_current_user),
 ):
     book_borrow = await service.return_book(book_id, current_user)
-    return SuccessResponse(
-        message="Book returned successfully",
-        data=book_borrow,
-    )
+    return SuccessResponse(message="Book returned successfully", data=book_borrow)
 
 
 @router.post(
-        "/{book_id}/reviews", 
-        response_model=SuccessResponse[ReviewPublic], 
-        status_code=status.HTTP_201_CREATED, 
-        summary="Submit a review for a book"
-    )
+    "/{book_id}/reviews",
+    response_model=SuccessResponse[ReviewPublic],
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit a review for a book",
+)
 async def create_review(
     book_id: UUID,
     payload: ReviewCreate,
@@ -220,43 +200,34 @@ async def create_review(
     review = await service.create_review(book_id, payload, current_user)
     background_tasks.add_task(update_book_review_consensus_job, str(book_id))
     background_tasks.add_task(update_user_preferences_job, str(current_user.id))
-    return SuccessResponse(
-        message="Review submitted successfully",
-        data=review,
-    )
+    return SuccessResponse(message="Review submitted successfully", data=review)
 
 
 @router.get(
-        "/{book_id}/reviews", 
-        response_model=SuccessResponse[list[ReviewPublic]], 
-        status_code=status.HTTP_200_OK, 
-        summary="List all reviews for a book"
-    )
+    "/{book_id}/reviews",
+    response_model=SuccessResponse[list[ReviewPublic]],
+    status_code=status.HTTP_200_OK,
+    summary="List all reviews for a book",
+)
 async def list_reviews(
     book_id: UUID,
     service: ReviewService = Depends(get_review_service),
     _: User = Depends(get_current_user),
 ):
     reviews = await service.list_reviews(book_id)
-    return SuccessResponse(
-        message="Reviews fetched successfully",
-        data=reviews,
-    )
+    return SuccessResponse(message="Reviews fetched successfully", data=reviews)
 
 
 @router.get(
-        "/{book_id}/insight", 
-        response_model=SuccessResponse[BookInsightPublic], 
-        status_code=status.HTTP_200_OK, 
-        summary="Get insights for a specific book"
-    )
+    "/{book_id}/insight",
+    response_model=SuccessResponse[BookInsightPublic],
+    status_code=status.HTTP_200_OK,
+    summary="Get insights for a specific book",
+)
 async def get_book_insight(
     book_id: UUID,
     service: ReviewService = Depends(get_review_service),
     _: User = Depends(get_current_user),
 ):
     insight = await service.get_book_insight(book_id)
-    return SuccessResponse(
-        message="Book insight fetched successfully",
-        data=insight,
-    )
+    return SuccessResponse(message="Book insight fetched successfully", data=insight)

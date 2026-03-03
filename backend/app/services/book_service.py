@@ -13,7 +13,7 @@ from app.providers import (
 )
 from app.repositories.book_repository import BookRepository
 from app.repositories.book_borrow_repository import BookBorrowRepository
-from app.schemas.book import BookCreate, BookPublic, BookUpdate, validate_book_upload_file
+from app.schemas.book import BookCreate, BookDetail, BookUpdate, validate_book_upload_file
 from app.schemas.library import BookBorrowPublic
 
 
@@ -30,7 +30,7 @@ class BookService:
         self.storage = storage or build_storage_provider()
         self.summary_provider = summary_provider or LocalBookSummaryProvider()
 
-    async def create_book(self, payload: BookCreate, upload_file: UploadFile, current_user: User) -> BookPublic:
+    async def create_book(self, payload: BookCreate, upload_file: UploadFile, current_user: User) -> BookDetail:
         self._validate_upload(upload_file)
         stored_file = self.storage.save_book_file(upload_file)
         try:
@@ -47,21 +47,21 @@ class BookService:
         except Exception:
             self.storage.delete_book_file(stored_file.path)
             raise
-        return BookPublic.from_orm_book(book)
+        return BookDetail.from_orm_book(book)
 
-    async def list_books(self, page: int, page_size: int) -> tuple[list[BookPublic], int]:
+    async def list_books(self, page: int, page_size: int) -> tuple[list[BookDetail], int]:
         offset = (page - 1) * page_size
         books = await self.book_repo.list_books(offset=offset, limit=page_size)
         total = await self.book_repo.count_books()
-        return [BookPublic.from_orm_book(book) for book in books], total
+        return [BookDetail.from_orm_book(book) for book in books], total
 
-    async def update_book(self, book_id: UUID, payload: BookUpdate) -> BookPublic:
+    async def update_book(self, book_id: UUID, payload: BookUpdate) -> BookDetail:
         book = await self._get_book_or_404(book_id)
         update_data = payload.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(book, field, value)
         saved = await self.book_repo.save(book)
-        return BookPublic.from_orm_book(saved)
+        return BookDetail.from_orm_book(saved)
 
     async def delete_book(self, book_id: UUID) -> None:
         book = await self._get_book_or_404(book_id)

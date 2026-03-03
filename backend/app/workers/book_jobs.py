@@ -12,26 +12,65 @@ logger = logging.getLogger(__name__)
 
 async def generate_book_summary_job(book_id: str) -> None:
     """Run LLM-based book summary generation in an isolated DB session."""
+    try:
+        book_uuid = UUID(book_id)
+    except ValueError:
+        logger.error(
+            "generate_book_summary_job received invalid book_id=%s",
+            book_id,
+        )
+        return
+
     async with SessionLocal() as db:
         try:
-            await BookService(db, storage=build_storage_provider()).generate_summary_from_llm(UUID(book_id))
+            service = BookService(db, storage=build_storage_provider())
+            await service.generate_summary_from_llm(book_uuid)
         except Exception:
-            logger.exception("Error generating summary for book %s", book_id)
+            logger.exception(
+                "generate_book_summary_job failed for book_id=%s",
+                book_id,
+            )
 
 
 async def update_book_review_consensus_job(book_id: str) -> None:
     """Rebuild reader consensus in an isolated DB session."""
+    try:
+        book_uuid = UUID(book_id)
+    except ValueError:
+        logger.error(
+            "update_book_review_consensus_job received invalid book_id=%s",
+            book_id,
+        )
+        return
+
     async with SessionLocal() as db:
         try:
-            await ReviewService(db).update_review_consensus(UUID(book_id))
+            service = ReviewService(db)
+            await service.update_review_consensus(book_uuid)
         except Exception:
-            logger.exception("Error updating review consensus for book %s", book_id)
+            logger.exception(
+                "update_book_review_consensus_job failed for book_id=%s",
+                book_id,
+            )
 
 
 async def update_user_preferences_job(user_id: str) -> None:
     """Refresh recommendation preferences in an isolated DB session."""
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        logger.error(
+            "update_user_preferences_job received invalid user_id=%s",
+            user_id,
+        )
+        return
+
     async with SessionLocal() as db:
         try:
-            await RecommendationService(db).update_user_preferences(UUID(user_id))
+            service = RecommendationService(db)
+            await service.update_user_preferences(user_uuid)
         except Exception:
-            logger.exception("Error updating user preferences for user %s", user_id)
+            logger.exception(
+                "update_user_preferences_job failed for user_id=%s",
+                user_id,
+            )

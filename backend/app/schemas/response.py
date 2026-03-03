@@ -37,7 +37,6 @@ class SuccessResponse(BaseModel, Generic[T]):
 
 class PaginatedSuccessResponse(BaseModel, Generic[T]):
     success: bool = True
-    status_code: int
     message: str
     data: list[T]
     meta: PaginationMeta
