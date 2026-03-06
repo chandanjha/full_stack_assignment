@@ -42,7 +42,6 @@ Book creation includes uploading actual content (PDF/TXT), not just metadata.
 ### 3.2 Approach
 A storage interface (`StorageProvider`) defines:
 - save_book_file(upload_file) -> StoredFile
-- delete_book_file(file_path)
 - get_absolute_path(file_path)
 
 Current implementation:
