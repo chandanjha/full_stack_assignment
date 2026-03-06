@@ -19,6 +19,7 @@ export default function DashboardClient({
   initialSelectedBookId,
   initialReviews,
   initialInsight,
+  initialDetailsLoaded,
   initialPreferences,
   initialRecommendations,
 }) {
@@ -66,6 +67,7 @@ export default function DashboardClient({
     initialSelectedBookId,
     initialReviews,
     initialInsight,
+    initialDetailsLoaded,
     initialPreferences,
     initialRecommendations,
   });

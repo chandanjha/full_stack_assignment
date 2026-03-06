@@ -1,68 +1,230 @@
-"use client";
-
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
-import FullPageLoader from "@/components/FullPageLoader";
-import { ApiRequestError } from "@/lib/api";
-import { authService } from "@/services/auth-service";
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  USER_SNAPSHOT_COOKIE,
+  serializeUserSnapshot,
+} from "@/lib/auth";
+import { BACKEND_API_BASE_URL } from "@/lib/config";
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
+const ACCESS_TOKEN_MAX_AGE_SECONDS = 60 * 60;
+const REFRESH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+function buildCookieOptions(maxAge) {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge,
   };
+}
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setFieldErrors({});
-    setLoading(true);
-    let isNavigating = false;
+function parseBackendPayload(body) {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) {
+    return null;
+  }
 
-    try {
-      await authService.login({
-        email: formData.email,
-        password: formData.password,
-      });
+  try {
+    return JSON.parse(trimmedBody);
+  } catch {
+    return trimmedBody;
+  }
+}
 
-      isNavigating = true;
-      router.replace("/dashboard");
-    } catch (err) {
-      if (err instanceof ApiRequestError) {
-        setError(err.message);
-        setFieldErrors(err.fieldErrors);
-      } else {
-        setError(err instanceof Error ? err.message : "An error occurred");
-      }
-    } finally {
-      if (!isNavigating) {
-        setLoading(false);
-      }
+function extractLoginTokens(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  if (
+    typeof payload.access_token === "string"
+    && typeof payload.refresh_token === "string"
+    && typeof payload.token_type === "string"
+  ) {
+    return payload;
+  }
+
+  const nestedToken = payload.data?.token;
+  if (
+    !nestedToken
+    || typeof nestedToken !== "object"
+    || typeof nestedToken.access_token !== "string"
+    || typeof nestedToken.refresh_token !== "string"
+    || typeof nestedToken.token_type !== "string"
+  ) {
+    return null;
+  }
+
+  return nestedToken;
+}
+
+function extractLoginUser(payload) {
+  const user = payload?.data?.user;
+
+  if (
+    !user
+    || typeof user !== "object"
+    || typeof user.id !== "string"
+    || typeof user.email !== "string"
+    || typeof user.role !== "string"
+    || typeof user.is_active !== "boolean"
+  ) {
+    return null;
+  }
+
+  return user;
+}
+
+function toFieldErrors(errors) {
+  if (!errors?.length) {
+    return {};
+  }
+
+  const fieldErrors = {};
+  for (const error of errors) {
+    if (!error?.field || !error.message) {
+      continue;
     }
+
+    const fieldKey = error.field.split(".").pop()?.trim();
+    if (fieldKey && !fieldErrors[fieldKey]) {
+      fieldErrors[fieldKey] = error.message;
+    }
+  }
+
+  return fieldErrors;
+}
+
+function getQueryValue(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return value[0];
+  }
+
+  return "";
+}
+
+function redirectWithError(error, email, fieldErrors = {}) {
+  const query = new URLSearchParams();
+  if (error) {
+    query.set("error", error);
+  }
+  if (email) {
+    query.set("email", email);
+  }
+  if (fieldErrors.email) {
+    query.set("field_email", fieldErrors.email);
+  }
+  if (fieldErrors.password) {
+    query.set("field_password", fieldErrors.password);
+  }
+
+  redirect(`/login?${query.toString()}`);
+}
+
+async function loginAction(formData) {
+  "use server";
+
+  const email = typeof formData.get("email") === "string" ? formData.get("email").trim() : "";
+  const password = typeof formData.get("password") === "string" ? formData.get("password") : "";
+
+  const fieldErrors = {};
+  if (!email) {
+    fieldErrors.email = "Email is required";
+  }
+  if (!password) {
+    fieldErrors.password = "Password is required";
+  }
+
+  if (Object.keys(fieldErrors).length > 0) {
+    redirectWithError("Please correct the highlighted fields", email, fieldErrors);
+  }
+
+  try {
+    const backendResponse = await fetch(`${BACKEND_API_BASE_URL}/v1/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+      cache: "no-store",
+    });
+    const responseBody = await backendResponse.text();
+    const parsedBody = parseBackendPayload(responseBody);
+
+    if (!backendResponse.ok) {
+      if (parsedBody && typeof parsedBody === "object") {
+        const apiFieldErrors = toFieldErrors(parsedBody.errors);
+        const errorMessage = parsedBody.errors?.[0]?.message || parsedBody.detail || parsedBody.message || "Login failed";
+        redirectWithError(errorMessage, email, apiFieldErrors);
+      }
+
+      const fallbackError = typeof parsedBody === "string" && parsedBody.trim() ? parsedBody : "Login failed";
+      redirectWithError(fallbackError, email);
+    }
+
+    const loginResponse = extractLoginTokens(parsedBody);
+    const loginUser = extractLoginUser(parsedBody);
+    if (!loginResponse) {
+      redirectWithError("Login response is missing tokens", email);
+    }
+
+    const cookieStore = await cookies();
+    cookieStore.set(
+      ACCESS_TOKEN_COOKIE,
+      loginResponse.access_token,
+      buildCookieOptions(ACCESS_TOKEN_MAX_AGE_SECONDS),
+    );
+    cookieStore.set(
+      REFRESH_TOKEN_COOKIE,
+      loginResponse.refresh_token,
+      buildCookieOptions(REFRESH_TOKEN_MAX_AGE_SECONDS),
+    );
+
+    const serializedUserSnapshot = serializeUserSnapshot(loginUser);
+    if (serializedUserSnapshot) {
+      cookieStore.set(
+        USER_SNAPSHOT_COOKIE,
+        serializedUserSnapshot,
+        buildCookieOptions(REFRESH_TOKEN_MAX_AGE_SECONDS),
+      );
+    } else {
+      cookieStore.delete(USER_SNAPSHOT_COOKIE);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Login failed";
+    redirectWithError(message, email);
+  }
+
+  redirect("/dashboard");
+}
+
+export default async function LoginPage({ searchParams }) {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+
+  if (accessToken) {
+    redirect("/dashboard");
+  }
+
+  const resolvedSearchParams = await searchParams;
+  const error = getQueryValue(resolvedSearchParams?.error);
+  const fieldErrors = {
+    email: getQueryValue(resolvedSearchParams?.field_email),
+    password: getQueryValue(resolvedSearchParams?.field_password),
   };
+  const initialEmail = getQueryValue(resolvedSearchParams?.email);
 
   return (
     <>
-      <FullPageLoader
-        visible={loading}
-        overlay
-        title="Signing you in"
-        description="Please wait while we verify your account."
-      />
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="w-full max-w-md">
           <div className="bg-white rounded-lg shadow-xl p-8">
@@ -80,7 +242,7 @@ export default function LoginPage() {
             )}
 
             {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form action={loginAction} className="space-y-5">
               {/* Email Input */}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -90,8 +252,7 @@ export default function LoginPage() {
                   type="email"
                   id="email"
                   name="email"
-                  value={formData.email}
-                  onChange={handleChange}
+                  defaultValue={initialEmail}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="you@example.com"
                   required
@@ -110,8 +271,6 @@ export default function LoginPage() {
                   type="password"
                   id="password"
                   name="password"
-                  value={formData.password}
-                  onChange={handleChange}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="••••••••"
                   required
@@ -135,10 +294,9 @@ export default function LoginPage() {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2 rounded-lg transition duration-200"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition duration-200"
               >
-                {loading ? "Signing in..." : "Sign In"}
+                Sign In
               </button>
             </form>
 

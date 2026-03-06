@@ -467,7 +467,6 @@ class LocalRecommendationRankingProvider:
         candidate_terms = self._tokenize(searchable_text)
         overlap = profile_terms.intersection(candidate_terms)
 
-        # Keep it simple and less “AI-ish”: require at least 2 overlaps to claim theme similarity.
         if len(overlap) >= 2:
             score += self.weights.theme_weight
             sample = sorted(list(overlap))[:3]

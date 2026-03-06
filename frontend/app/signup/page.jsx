@@ -1,82 +1,155 @@
-"use client";
-
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
-import FullPageLoader from "@/components/FullPageLoader";
-import { ApiRequestError } from "@/lib/api";
-import { authService } from "@/services/auth-service";
+import { ACCESS_TOKEN_COOKIE } from "@/lib/auth";
+import { BACKEND_API_BASE_URL } from "@/lib/config";
 
-export default function SignupPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
+function parseBackendPayload(body) {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) {
+    return null;
+  }
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  try {
+    return JSON.parse(trimmedBody);
+  } catch {
+    return trimmedBody;
+  }
+}
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setFieldErrors({});
+function toFieldErrors(errors) {
+  if (!errors?.length) {
+    return {};
+  }
 
-    // Validation
-    if (formData.password !== formData.confirmPassword) {
-      setFieldErrors({ confirmPassword: "Passwords do not match" });
-      return;
+  const fieldErrors = {};
+  for (const error of errors) {
+    if (!error?.field || !error.message) {
+      continue;
     }
 
-    if (formData.password.length < 8) {
-      setFieldErrors({ password: "Password must be at least 8 characters" });
-      return;
+    const fieldKey = error.field.split(".").pop()?.trim();
+    if (fieldKey && !fieldErrors[fieldKey]) {
+      fieldErrors[fieldKey] = error.message;
     }
+  }
 
-    setLoading(true);
-    let isNavigating = false;
+  return fieldErrors;
+}
 
-    try {
-      await authService.signup({
-        email: formData.email,
-        password: formData.password,
-      });
+function getQueryValue(value) {
+  if (typeof value === "string") {
+    return value;
+  }
 
-      isNavigating = true;
-      router.push("/login");
-    } catch (err) {
-      if (err instanceof ApiRequestError) {
-        const nextFieldErrors = err.fieldErrors;
-        setFieldErrors(nextFieldErrors);
-        setError(Object.keys(nextFieldErrors).length > 0 ? "" : err.message);
-      } else {
-        setError(err instanceof Error ? err.message : "An error occurred");
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return value[0];
+  }
+
+  return "";
+}
+
+function redirectWithError(error, email, fieldErrors = {}) {
+  const query = new URLSearchParams();
+  if (error) {
+    query.set("error", error);
+  }
+  if (email) {
+    query.set("email", email);
+  }
+  if (fieldErrors.email) {
+    query.set("field_email", fieldErrors.email);
+  }
+  if (fieldErrors.password) {
+    query.set("field_password", fieldErrors.password);
+  }
+  if (fieldErrors.confirmPassword) {
+    query.set("field_confirm_password", fieldErrors.confirmPassword);
+  }
+
+  redirect(`/signup?${query.toString()}`);
+}
+
+async function signupAction(formData) {
+  "use server";
+
+  const email = typeof formData.get("email") === "string" ? formData.get("email").trim() : "";
+  const password = typeof formData.get("password") === "string" ? formData.get("password") : "";
+  const confirmPassword = typeof formData.get("confirmPassword") === "string"
+    ? formData.get("confirmPassword")
+    : "";
+
+  const fieldErrors = {};
+  if (!email) {
+    fieldErrors.email = "Email is required";
+  }
+  if (!password) {
+    fieldErrors.password = "Password is required";
+  }
+  if (!confirmPassword) {
+    fieldErrors.confirmPassword = "Confirm password is required";
+  }
+  if (password && confirmPassword && password !== confirmPassword) {
+    fieldErrors.confirmPassword = "Passwords do not match";
+  }
+  if (password && password.length < 8) {
+    fieldErrors.password = "Password must be at least 8 characters";
+  }
+
+  if (Object.keys(fieldErrors).length > 0) {
+    redirectWithError("Please correct the highlighted fields", email, fieldErrors);
+  }
+
+  try {
+    const backendResponse = await fetch(`${BACKEND_API_BASE_URL}/v1/auth/signup`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+      cache: "no-store",
+    });
+    const responseBody = await backendResponse.text();
+    const parsedBody = parseBackendPayload(responseBody);
+
+    if (!backendResponse.ok) {
+      if (parsedBody && typeof parsedBody === "object") {
+        const apiFieldErrors = toFieldErrors(parsedBody.errors);
+        const errorMessage = parsedBody.errors?.[0]?.message || parsedBody.detail || parsedBody.message || "Signup failed";
+        redirectWithError(errorMessage, email, apiFieldErrors);
       }
-    } finally {
-      if (!isNavigating) {
-        setLoading(false);
-      }
+
+      const fallbackError = typeof parsedBody === "string" && parsedBody.trim() ? parsedBody : "Signup failed";
+      redirectWithError(fallbackError, email);
     }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Signup failed";
+    redirectWithError(message, email);
+  }
+
+  redirect("/login");
+}
+
+export default async function SignupPage({ searchParams }) {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+
+  if (accessToken) {
+    redirect("/dashboard");
+  }
+
+  const resolvedSearchParams = await searchParams;
+  const error = getQueryValue(resolvedSearchParams?.error);
+  const fieldErrors = {
+    email: getQueryValue(resolvedSearchParams?.field_email),
+    password: getQueryValue(resolvedSearchParams?.field_password),
+    confirmPassword: getQueryValue(resolvedSearchParams?.field_confirm_password),
   };
+  const initialEmail = getQueryValue(resolvedSearchParams?.email);
 
   return (
     <>
-      <FullPageLoader
-        visible={loading}
-        overlay
-        title="Creating your account"
-        description="Please wait while we finish setting up your access."
-      />
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="w-full max-w-md">
           <div className="bg-white rounded-lg shadow-xl p-8">
@@ -94,7 +167,7 @@ export default function SignupPage() {
             )}
 
             {/* Signup Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form action={signupAction} className="space-y-4">
               {/* Email Input */}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -104,8 +177,7 @@ export default function SignupPage() {
                   type="email"
                   id="email"
                   name="email"
-                  value={formData.email}
-                  onChange={handleChange}
+                  defaultValue={initialEmail}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="you@example.com"
                   required
@@ -124,8 +196,6 @@ export default function SignupPage() {
                   type="password"
                   id="password"
                   name="password"
-                  value={formData.password}
-                  onChange={handleChange}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="••••••••"
                   required
@@ -144,8 +214,6 @@ export default function SignupPage() {
                   type="password"
                   id="confirmPassword"
                   name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="••••••••"
                   required
@@ -173,10 +241,9 @@ export default function SignupPage() {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2 rounded-lg transition duration-200 mt-6"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition duration-200 mt-6"
               >
-                {loading ? "Creating account..." : "Sign Up"}
+                Sign Up
               </button>
             </form>
 

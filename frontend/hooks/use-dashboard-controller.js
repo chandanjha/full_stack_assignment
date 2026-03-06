@@ -24,6 +24,7 @@ export function useDashboardController({
   initialSelectedBookId,
   initialReviews,
   initialInsight,
+  initialDetailsLoaded,
   initialPreferences,
   initialRecommendations,
 }) {
@@ -43,7 +44,7 @@ export function useDashboardController({
   const [profileLoading, setProfileLoading] = useState(Boolean(initialUser === null));
   const [booksLoading, setBooksLoading] = useState(Boolean(initialUser === null));
   const [detailLoading, setDetailLoading] = useState(
-    Boolean(initialSelectedBookId && initialReviews.length === 0 && initialInsight === null),
+    Boolean(initialSelectedBookId && !initialDetailsLoaded),
   );
   const [preferencesLoading, setPreferencesLoading] = useState(Boolean(initialPreferences === null));
   const [recommendationsLoading, setRecommendationsLoading] = useState(
@@ -353,7 +354,7 @@ export function useDashboardController({
 
     if (initialBooks.length === 0) {
       void loadBooks(1);
-    } else if (initialSelectedBookId && initialReviews.length === 0 && initialInsight === null) {
+    } else if (initialSelectedBookId && !initialDetailsLoaded) {
       void loadBookDetails(initialSelectedBookId);
     }
 
@@ -362,10 +363,9 @@ export function useDashboardController({
       void loadRecommendations();
     }
   }, [
-    initialInsight,
+    initialDetailsLoaded,
     initialBooks.length,
     initialPreferences,
-    initialReviews.length,
     initialSelectedBookId,
     initialUser,
   ]);
