@@ -1,11 +1,5 @@
 "use client";
 
-function sortBooksByNewest(items) {
-  return [...items].sort(
-    (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
-  );
-}
-
 export default function BookList({
   books,
   selectedBookId,
@@ -19,8 +13,6 @@ export default function BookList({
   onBookAction,
   onPageChange,
 }) {
-  const orderedBooks = sortBooksByNewest(books);
-
   return (
     <div className="rounded-3xl border border-white/70 bg-white/85 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
       <div className="mb-5 flex items-center justify-between gap-4">
@@ -34,7 +26,7 @@ export default function BookList({
         {booksLoading && <span className="text-sm text-slate-500">Refreshing...</span>}
       </div>
 
-      {orderedBooks.length === 0 ? (
+      {books.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-slate-500">
           {booksLoading
             ? "Loading library titles in the background..."
@@ -42,7 +34,7 @@ export default function BookList({
         </div>
       ) : (
         <div className="grid gap-4">
-          {orderedBooks.map((book) => {
+          {books.map((book) => {
             const isSelected = selectedBookId === book.id;
             const isBusy = bookActionId === book.id;
 

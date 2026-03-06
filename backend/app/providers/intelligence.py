@@ -431,7 +431,6 @@ class LocalRecommendationRankingProvider:
                 }
             )
 
-        # Stable ordering: score desc then book_id desc (or change to created_at if you have it).
         results.sort(key=lambda x: (x["score"], x["book_id"]), reverse=True)
         return results
 
