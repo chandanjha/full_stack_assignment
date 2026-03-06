@@ -19,7 +19,7 @@ LuminaLib is a full-stack book management application with authentication, book 
 ## Core Features
 
 - JWT-based signup, login, refresh, logout, and profile endpoints
-- Book upload, update, delete, and paginated listing
+- Book upload and paginated listing
 - Borrow and return workflow using the `book_borrows` table
 - Book reviews and reader insight summaries
 - Personalized recommendations and user preference profiling
@@ -113,25 +113,9 @@ See `backend/.env.example` for the full list.
 Primary route groups:
 
 - `/api/v1/auth`: signup, login, token refresh, logout, current user
-- `/api/v1/books`: create, list, update, delete, borrow, return, reviews, recommendations, preferences, insight
+- `/api/v1/books`: create, list, borrow, return, reviews, recommendations, preferences, insight
 
 Interactive API docs are available at `http://localhost:8000/docs`.
-
-## Database Note
-
-The current backend model uses the `book_borrows` table name, but the checked-in Alembic migration still creates `loans`.
-
-After running `alembic upgrade head`, execute:
-
-```sql
-ALTER TABLE loans RENAME TO book_borrows;
-```
-
-This applies to both fresh local databases and older databases created before the rename.
-
-The same statement is also stored in:
-
-- `backend/alembic/manual_rename_loans_to_book_borrows.sql`
 
 ## Useful Commands
 
