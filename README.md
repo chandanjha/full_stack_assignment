@@ -23,6 +23,7 @@ LuminaLib is a full-stack book management application with authentication, book 
 - Borrow and return workflow using the `book_borrows` table
 - Book reviews and reader insight summaries
 - Personalized recommendations and user preference profiling
+- Redis-backed recommendation caching with background refresh on borrow/review activity
 - AI-generated book summaries via configured LLM provider
 
 ## Quick Start With Docker
@@ -39,10 +40,14 @@ Services:
 - Backend API: `http://localhost:8000`
 - Swagger UI: `http://localhost:8000/docs`
 - pgAdmin: `http://localhost:5050`
+- Redis: `localhost:6379`
+- RedisInsight: `http://localhost:5540`
 
 Default Docker services in `docker-compose.yml`:
 
 - `db` (PostgreSQL 16)
+- `redis`
+- `redisinsight`
 - `pgadmin`
 - `backend`
 - `ollama`
@@ -105,6 +110,7 @@ Key settings:
 - CORS: `CORS_ALLOW_ORIGINS`
 - Storage: `STORAGE_PROVIDER`, `BOOK_STORAGE_DIR`, optional S3 settings
 - LLM: `LLM_ENABLED`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL`, provider-specific API keys
+- Redis cache: `REDIS_ENABLED`, `REDIS_URL`, `RECOMMENDATION_CACHE_TTL_SECONDS`, `RECOMMENDATION_CACHE_WARM_LIMIT`
 
 See `backend/.env.example` for the full list.
 

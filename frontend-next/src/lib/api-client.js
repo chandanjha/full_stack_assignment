@@ -92,6 +92,7 @@ export async function apiRequest(path, options = {}) {
       method,
       headers: requestHeaders,
       body: requestBody,
+      cache: "no-store",
       signal: abortController?.signal || signal,
     });
   } catch (error) {

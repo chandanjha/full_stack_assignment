@@ -31,8 +31,11 @@ export default function Navbar() {
     setIsLoggingOut(true);
     await logout();
     setSession(null);
-    router.push("/login");
-    router.refresh();
+    if (typeof window !== "undefined") {
+      window.location.replace("/login");
+      return;
+    }
+    router.replace("/login");
     setIsLoggingOut(false);
   };
 

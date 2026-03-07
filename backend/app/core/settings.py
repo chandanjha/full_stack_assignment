@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote_plus
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
-from urllib.parse import quote_plus
 
 
 class Settings(BaseSettings):
@@ -64,6 +64,13 @@ class Settings(BaseSettings):
     GROK_API_KEY: str = ""
     GPT_BASE_URL: str = "https://api.openai.com/v1"
     GPT_API_KEY: str = ""
+
+    REDIS_ENABLED: bool = False
+    REDIS_URL: str = "redis://redis:6379/0"
+    REDIS_SOCKET_TIMEOUT_SECONDS: float = 0.5
+    REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS: float = 0.5
+    RECOMMENDATION_CACHE_TTL_SECONDS: int = 900
+    RECOMMENDATION_CACHE_WARM_LIMIT: int = 5
 
     @field_validator("CORS_ALLOW_ORIGINS", mode="before")
     @classmethod

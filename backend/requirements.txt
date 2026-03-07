@@ -17,3 +17,4 @@ python-jose==3.3.0
 pypdf
 boto3
 black
+redis

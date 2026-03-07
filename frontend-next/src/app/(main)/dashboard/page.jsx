@@ -1,10 +1,13 @@
-"use client";
-
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
-import { getSession } from "@/services/auth-service";
-import { fetchPreferences, fetchRecommendations } from "@/services/book-service";
+import { serverApiRequest } from "@/lib/server-api";
+
+const AUTH_ACCESS_TOKEN_COOKIE_KEY = "luminalib_access_token";
+const RECOMMENDATION_REQUEST_TIMEOUT_MS = 20000;
+
+export const dynamic = "force-dynamic";
 
 function formatDate(dateValue) {
   if (!dateValue) {
@@ -25,92 +28,60 @@ function getRecommendationErrorMessage(message) {
   return message || "Unable to load recommendations";
 }
 
-export default function Dashboard() {
-  const session = getSession();
-  const accessToken = session?.token?.access_token || "";
-  const isLoggedIn = Boolean(accessToken);
-  const [isLoadingPreferences, setIsLoadingPreferences] = useState(isLoggedIn);
-  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(isLoggedIn);
-  const [preferencesError, setPreferencesError] = useState("");
-  const [recommendationsError, setRecommendationsError] = useState("");
-  const [preferences, setPreferences] = useState(null);
-  const [recommendations, setRecommendations] = useState([]);
+export default async function DashboardPage() {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(AUTH_ACCESS_TOKEN_COOKIE_KEY)?.value || "";
+  if (!accessToken) {
+    redirect("/login");
+  }
 
-  const loadDashboardData = useCallback(async () => {
-    if (!isLoggedIn) {
-      setIsLoadingPreferences(false);
-      setIsLoadingRecommendations(false);
-      setPreferencesError("");
-      setRecommendationsError("");
-      setPreferences(null);
-      setRecommendations([]);
-      return;
-    }
+  let user = null;
+  try {
+    const authPayload = await serverApiRequest("/v1/auth/me", { accessToken, timeoutMs: 10000 });
+    user = authPayload?.data || null;
+  } catch {
+    redirect("/login");
+  }
 
-    setPreferencesError("");
-    setRecommendationsError("");
-    setIsLoadingPreferences(true);
-    setIsLoadingRecommendations(true);
+  let preferences = null;
+  let recommendations = [];
+  let preferencesError = "";
+  let recommendationsError = "";
 
-    const [preferencesResult, recommendationsResult] = await Promise.allSettled([
-      fetchPreferences(accessToken),
-      fetchRecommendations(accessToken, { limit: 5, timeoutMs: 20000 }),
-    ]);
+  // Load preferences first to avoid sending both requests simultaneously.
+  try {
+    const preferencesPayload = await serverApiRequest("/v1/books/preferences/me", { accessToken });
+    preferences = preferencesPayload?.data || null;
+  } catch (requestError) {
+    preferencesError = requestError?.message || "Unable to load preferences";
+  }
 
-    if (preferencesResult.status === "fulfilled") {
-      setPreferences(preferencesResult.value);
-    } else {
-      setPreferencesError(preferencesResult.reason?.message || "Unable to load preferences");
-    }
-    setIsLoadingPreferences(false);
-
-    if (recommendationsResult.status === "fulfilled") {
-      setRecommendations(recommendationsResult.value);
-    } else {
-      setRecommendationsError(getRecommendationErrorMessage(recommendationsResult.reason?.message));
-    }
-    setIsLoadingRecommendations(false);
-  }, [accessToken, isLoggedIn]);
-
-  useEffect(() => {
-    const timerId = setTimeout(() => {
-      loadDashboardData();
-    }, 0);
-    return () => clearTimeout(timerId);
-  }, [loadDashboardData]);
-
-  if (!isLoggedIn) {
-    return (
-      <div className="alert alert-warning mt-3">
-        Please{" "}
-        <Link href="/login" className="alert-link">
-          login
-        </Link>{" "}
-        to view your dashboard.
-      </div>
-    );
+  // Load recommendations after preferences.
+  try {
+    const recommendationsPayload = await serverApiRequest("/v1/books/recommendations?limit=5", {
+      accessToken,
+      timeoutMs: RECOMMENDATION_REQUEST_TIMEOUT_MS,
+    });
+    recommendations = Array.isArray(recommendationsPayload?.data) ? recommendationsPayload.data : [];
+  } catch (requestError) {
+    recommendationsError = getRecommendationErrorMessage(requestError?.message);
   }
 
   return (
     <div className="container mt-3">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h1 className="mb-0">Dashboard</h1>
-        <button
-          type="button"
-          className="btn btn-outline-primary btn-sm"
-          onClick={loadDashboardData}
-          disabled={isLoadingPreferences || isLoadingRecommendations}
-        >
+        <Link href="/dashboard" className="btn btn-outline-primary btn-sm">
           Refresh
-        </button>
+        </Link>
       </div>
 
       <div className="card mb-3">
         <div className="card-body">
           <h5 className="card-title">Logged In User</h5>
-          <p className="mb-1"><strong>Email:</strong> {session?.user?.email || "-"}</p>
-          <p className="mb-1 text-capitalize"><strong>Role:</strong> {session?.user?.role || "-"}</p>
-          <p className="mb-0"><strong>Status:</strong> {session?.user?.is_active ? "Active" : "Inactive"}</p>
+          <p className="mb-1"><strong>Email:</strong> {user?.email || "-"}</p>
+          <p className="mb-1 text-capitalize"><strong>Role:</strong> {user?.role || "-"}</p>
+          <p className="mb-0"><strong>Status:</strong> {user?.is_active ? "Active" : "Inactive"}</p>
         </div>
       </div>
 
@@ -118,10 +89,9 @@ export default function Dashboard() {
         <div className="card-body">
           <h5 className="card-title">Your Preferences</h5>
 
-          {isLoadingPreferences ? <p className="text-muted mb-0">Loading preferences...</p> : null}
           {preferencesError ? <div className="alert alert-danger py-2 mb-0">{preferencesError}</div> : null}
 
-          {!isLoadingPreferences && !preferencesError ? (
+          {!preferencesError ? (
             <>
               <p className="mb-2">
                 <strong>Preference Summary:</strong>{" "}
@@ -163,10 +133,9 @@ export default function Dashboard() {
         <div className="card-body">
           <h5 className="card-title">Book Recommendations</h5>
 
-          {isLoadingRecommendations ? <p className="text-muted">Loading recommendations...</p> : null}
           {recommendationsError ? <div className="alert alert-danger py-2">{recommendationsError}</div> : null}
 
-          {!isLoadingRecommendations && !recommendationsError ? (
+          {!recommendationsError ? (
             recommendations.length > 0 ? (
               <div className="table-responsive">
                 <table className="table table-striped table-hover align-middle mb-0">

@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { getSession, login } from "@/services/auth-service";
+import { login } from "@/services/auth-service";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,13 +12,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    const existingSession = getSession();
-    if (existingSession?.token?.access_token) {
-      router.replace("/dashboard");
-    }
-  }, [router]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();

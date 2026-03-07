@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { getSession, subscribeSessionChange } from "@/services/auth-service";
+import { getSession, subscribeSessionChange, validateSession } from "@/services/auth-service";
 
 export default function AuthLayout({ children }) {
   const router = useRouter();
@@ -11,18 +11,42 @@ export default function AuthLayout({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const syncAuthState = () => {
+    let isMounted = true;
+
+    const syncAuthState = async () => {
       const session = getSession();
       const hasToken = Boolean(session?.token?.access_token);
-      setIsAuthenticated(hasToken);
+
+      if (!hasToken) {
+        if (!isMounted) {
+          return;
+        }
+        setIsAuthenticated(false);
+        setIsReady(true);
+        return;
+      }
+
+      const isValidSession = await validateSession();
+      if (!isMounted) {
+        return;
+      }
+
+      setIsAuthenticated(isValidSession);
       setIsReady(true);
-      if (hasToken) {
+      if (isValidSession) {
         router.replace("/dashboard");
       }
     };
 
-    syncAuthState();
-    return subscribeSessionChange(syncAuthState);
+    void syncAuthState();
+    const unsubscribe = subscribeSessionChange(() => {
+      void syncAuthState();
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [router]);
 
   if (!isReady) {

@@ -11,8 +11,10 @@ from app.providers import (
     RecommendationProfileProvider,
     RecommendationRankingProvider,
 )
+from app.providers.cache import get_redis_client
 from app.repositories.book_borrow_repository import BookBorrowRepository
 from app.repositories.book_repository import BookRepository
+from app.repositories.recommendation_cache_repository import RecommendationCacheRepository
 from app.repositories.review_repository import ReviewRepository
 from app.repositories.user_preference_repository import UserPreferenceRepository
 from app.schemas.book import BookDetail
@@ -25,12 +27,16 @@ class RecommendationService:
         db: AsyncSession,
         recommendation_profile_provider: RecommendationProfileProvider | None = None,
         recommendation_ranking_provider: RecommendationRankingProvider | None = None,
+        recommendation_cache_repo: RecommendationCacheRepository | None = None,
     ):
         self.db = db
         self.book_repo = BookRepository(db)
         self.book_borrow_repo = BookBorrowRepository(db)
         self.review_repo = ReviewRepository(db)
         self.user_preference_repo = UserPreferenceRepository(db)
+        self.recommendation_cache_repo = recommendation_cache_repo or RecommendationCacheRepository(
+            get_redis_client()
+        )
         self.recommendation_profile_provider = (
             recommendation_profile_provider or LocalRecommendationProfileProvider()
         )
@@ -86,7 +92,42 @@ class RecommendationService:
 
     async def recommend_books(self, current_user: User, limit: int = 5) -> list[RecommendationPublic]:
         safe_limit = max(limit, 1)
-        generated_preference = await self.update_user_preferences(current_user.id)
+        cached_recommendations = await self.recommendation_cache_repo.get_user_recommendations(
+            current_user.id,
+            safe_limit,
+        )
+        if cached_recommendations is not None:
+            return cached_recommendations
+
+        recommendations = await self._generate_recommendations(current_user.id, safe_limit)
+        await self.recommendation_cache_repo.set_user_recommendations(
+            current_user.id,
+            safe_limit,
+            recommendations,
+        )
+        return recommendations
+
+    async def refresh_recommendation_cache(
+        self,
+        user_id: UUID,
+        limit: int = 5,
+    ) -> list[RecommendationPublic]:
+        safe_limit = max(limit, 1)
+        await self.recommendation_cache_repo.invalidate_user_recommendations(user_id)
+        recommendations = await self._generate_recommendations(user_id, safe_limit)
+        await self.recommendation_cache_repo.set_user_recommendations(
+            user_id,
+            safe_limit,
+            recommendations,
+        )
+        return recommendations
+
+    async def _generate_recommendations(
+        self,
+        user_id: UUID,
+        limit: int,
+    ) -> list[RecommendationPublic]:
+        generated_preference = await self.update_user_preferences(user_id)
         preferred_tags = generated_preference.preferred_tags
         preferred_authors = generated_preference.preferred_authors
         preference_summary_for_ranking = (
@@ -96,9 +137,9 @@ class RecommendationService:
         all_books = await self.book_repo.list_all_books()
         borrowed_book_ids = {
             book_borrow.book_id
-            for book_borrow in await self.book_borrow_repo.list_user_book_borrows(current_user.id)
+            for book_borrow in await self.book_borrow_repo.list_user_book_borrows(user_id)
         }
-        reviewed_book_ids = {review.book_id for review in await self.review_repo.list_user_reviews(current_user.id)}
+        reviewed_book_ids = {review.book_id for review in await self.review_repo.list_user_reviews(user_id)}
         excluded_ids = borrowed_book_ids | reviewed_book_ids
 
         candidate_books = [
@@ -119,7 +160,7 @@ class RecommendationService:
             favorite_authors=preferred_authors,
             preference_summary=preference_summary_for_ranking,
             candidate_books=candidate_books,
-            limit=safe_limit,
+            limit=limit,
         )
         books_by_id = {
             str(book.id): book
@@ -143,7 +184,7 @@ class RecommendationService:
                 )
             )
 
-        return recommendations[:safe_limit]
+        return recommendations[:limit]
 
     async def _get_user_borrowed_books(self, user_id: UUID):
         book_borrows = await self.book_borrow_repo.list_user_book_borrows(user_id)

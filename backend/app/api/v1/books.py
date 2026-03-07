@@ -1,7 +1,7 @@
 from math import ceil
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Response, UploadFile, status
 
 from app.api.dependency import (
     get_book_service,
@@ -25,8 +25,8 @@ from app.services.recommendation_service import RecommendationService
 from app.services.review_service import ReviewService
 from app.workers import (
     generate_book_summary_job,
+    refresh_user_recommendations_cache_job,
     update_book_review_consensus_job,
-    update_user_preferences_job,
 )
 
 router = APIRouter(prefix="/books", tags=["Books"])
@@ -99,12 +99,17 @@ async def list_books(
     summary="Get GenAI content-based book recommendations for the current user",
 )
 async def recommend_books(
+    response: Response,
     limit: int = 5,
     service: RecommendationService = Depends(get_recommendation_service),
     current_user: User = Depends(get_current_user),
 ):
+    response.headers["Cache-Control"] = "private, no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Vary"] = "Authorization"
+
     recommendations = await service.recommend_books(current_user, limit=limit)
-    return SuccessResponse(message="GenAI content-based recommendations generated successfully", data=recommendations)
+    return SuccessResponse(message="GenAI content-based recommendations fetched successfully", data=recommendations)
 
 
 @router.get(
@@ -165,7 +170,7 @@ async def borrow_book(
     current_user: User = Depends(get_current_user),
 ):
     book_borrow = await service.borrow_book(book_id, current_user)
-    background_tasks.add_task(update_user_preferences_job, str(current_user.id))
+    background_tasks.add_task(refresh_user_recommendations_cache_job, str(current_user.id))
     return SuccessResponse(message="Book borrowed successfully", data=book_borrow)
 
 
@@ -199,7 +204,7 @@ async def create_review(
 ):
     review = await service.create_review(book_id, payload, current_user)
     background_tasks.add_task(update_book_review_consensus_job, str(book_id))
-    background_tasks.add_task(update_user_preferences_job, str(current_user.id))
+    background_tasks.add_task(refresh_user_recommendations_cache_job, str(current_user.id))
     return SuccessResponse(message="Review submitted successfully", data=review)
 
 

@@ -1,4 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./globals.css";
 
@@ -20,7 +21,37 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {process.env.NODE_ENV === "development" ? (
+          <Script id="perf-measure-guard" strategy="beforeInteractive">
+            {`
+              (() => {
+                if (!window.performance || typeof window.performance.measure !== "function") {
+                  return;
+                }
+
+                const originalMeasure = window.performance.measure.bind(window.performance);
+                window.performance.measure = (...args) => {
+                  try {
+                    return originalMeasure(...args);
+                  } catch (error) {
+                    if (
+                      error instanceof DOMException &&
+                      typeof error.message === "string" &&
+                      error.message.includes("cannot have a negative time stamp")
+                    ) {
+                      return undefined;
+                    }
+
+                    throw error;
+                  }
+                };
+              })();
+            `}
+          </Script>
+        ) : null}
+        {children}
+      </body>
     </html>
   );
 }

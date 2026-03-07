@@ -11,6 +11,24 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: app_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: app_redisinsight
+    ports:
+      - "5540:5540"
+    volumes:
+      - redisinsight_data:/data
+    depends_on:
+      - redis
+
   pgadmin:
     image: dpage/pgadmin4
     container_name: app_pgadmin
@@ -31,12 +49,19 @@ services:
       DB_NAME: appdb
       DB_USER: appuser
       DB_PASSWORD: apppass
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
+      REDIS_SOCKET_TIMEOUT_SECONDS: 0.5
+      REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS: 0.5
+      RECOMMENDATION_CACHE_TTL_SECONDS: 900
+      RECOMMENDATION_CACHE_WARM_LIMIT: 5
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
     depends_on:
       - db
+      - redis
       - ollama
 
   ollama:
@@ -66,4 +91,6 @@ services:
 
 volumes:
   pgdata:
+  redis_data:
+  redisinsight_data:
   ollama_data:

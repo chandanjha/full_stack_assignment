@@ -5,14 +5,15 @@ from fastapi.openapi.utils import get_openapi
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import router as api_router
-from app.core.settings import settings
 from app.core.exception_handlers import (
     app_exception_handler,
     http_exception_handler,
     unhandled_exception_handler,
     validation_exception_handler,
 )
+from app.core.settings import settings
 from app.exceptions.app_exception import AppException
+from app.providers.cache import close_redis_client
 from app.schemas.response import ErrorResponse
 
 app = FastAPI(title="LuminaLib API", version="1.0.0", description="API for book recommendations, reviews, and user management.")
@@ -81,3 +82,8 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api")
+
+
+@app.on_event("shutdown")
+async def close_connections() -> None:
+    await close_redis_client()
