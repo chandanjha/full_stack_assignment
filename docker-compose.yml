@@ -56,7 +56,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
+      - ./frontend-next:/app
       # keep container dependencies separate from host bind mount
       - /app/node_modules
       # keeps Next build artifacts inside the container to avoid stale host-side chunks
