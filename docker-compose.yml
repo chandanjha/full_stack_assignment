@@ -48,7 +48,7 @@ services:
       - ollama_data:/root/.ollama
 
   frontend:
-    build: ./frontend
+    build: ./frontend-next
     container_name: app_frontend
     environment:
       BACKEND_API_BASE_URL: http://backend:8000/api
