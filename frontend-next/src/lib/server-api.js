@@ -10,15 +10,22 @@ function extractErrorMessage(payload, fallbackMessage = "Request failed") {
     return fallbackMessage;
   }
 
+  const firstErrorMessage = Array.isArray(payload.errors) && payload.errors.length > 0
+    ? payload.errors
+      .map((item) => item?.message || item?.msg || item?.detail || "")
+      .find((message) => typeof message === "string" && message.trim())
+    : "";
+
   if (typeof payload.message === "string" && payload.message.trim()) {
+    const genericMessage = payload.message.trim().toLowerCase();
+    if (firstErrorMessage && (genericMessage === "validation error" || genericMessage === "request failed")) {
+      return firstErrorMessage;
+    }
     return payload.message;
   }
 
-  if (Array.isArray(payload.errors) && payload.errors.length > 0) {
-    const firstError = payload.errors[0];
-    if (firstError && typeof firstError.message === "string" && firstError.message.trim()) {
-      return firstError.message;
-    }
+  if (firstErrorMessage) {
+    return firstErrorMessage;
   }
 
   return fallbackMessage;
