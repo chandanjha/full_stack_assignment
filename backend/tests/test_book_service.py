@@ -106,6 +106,32 @@ async def test_return_book_raises_when_user_has_no_active_borrow():
     assert exc_info.value.detail == "This book is not currently borrowed by you"
 
 
+async def test_list_books_marks_active_borrow_status_for_current_user():
+    first_book = make_book()
+    second_book = make_book(id=uuid4(), title="Another Book")
+    user_id = uuid4()
+    service = build_service()
+    service.book_repo = SimpleNamespace(
+        list_books=AsyncMock(return_value=[first_book, second_book]),
+        count_books=AsyncMock(return_value=2),
+    )
+    service.book_borrow_repo = SimpleNamespace(
+        list_active_user_book_borrows=AsyncMock(
+            return_value=[SimpleNamespace(book_id=first_book.id)]
+        )
+    )
+
+    books, total = await service.list_books(page=1, page_size=10, current_user_id=user_id)
+
+    assert total == 2
+    assert books[0].is_borrowed_by_me is True
+    assert books[1].is_borrowed_by_me is False
+    service.book_borrow_repo.list_active_user_book_borrows.assert_awaited_once_with(
+        user_id,
+        [first_book.id, second_book.id],
+    )
+
+
 async def test_generate_summary_from_llm_updates_book_on_success():
     book = make_book()
     storage = Mock()

@@ -1,5 +1,7 @@
 import httpx
 
+RECOMMENDATION_TIMEOUT_CAP_SECONDS = 12
+
 
 class LLMService:
     def __init__(
@@ -60,18 +62,20 @@ class LLMService:
             candidate_catalog=candidate_catalog,
             limit=limit,
         )
-        return self._run_prompt(prompt)
+        timeout_seconds = min(self.timeout_seconds, RECOMMENDATION_TIMEOUT_CAP_SECONDS)
+        return self._run_prompt(prompt, timeout_seconds=timeout_seconds)
 
-    def _run_prompt(self, prompt: str) -> str:
+    def _run_prompt(self, prompt: str, timeout_seconds: int | None = None) -> str:
+        request_timeout = timeout_seconds if isinstance(timeout_seconds, int) and timeout_seconds > 0 else self.timeout_seconds
         if self.provider == "ollama":
-            return self._summarize_with_ollama(prompt)
+            return self._summarize_with_ollama(prompt, request_timeout)
         if self.provider == "grok":
-            return self._summarize_with_grok(prompt)
+            return self._summarize_with_grok(prompt, request_timeout)
         if self.provider in {"gpt", "chatgpt", "openai"}:
-            return self._summarize_with_chatgpt(prompt)
+            return self._summarize_with_chatgpt(prompt, request_timeout)
         raise ValueError(f"Unsupported LLM provider: {self.provider}")
 
-    def _summarize_with_ollama(self, prompt: str) -> str:
+    def _summarize_with_ollama(self, prompt: str, timeout_seconds: int) -> str:
         try:
             response = httpx.post(
                 f"{self.base_url}/api/generate",
@@ -80,7 +84,7 @@ class LLMService:
                     "prompt": prompt,
                     "stream": False,
                 },
-                timeout=self.timeout_seconds,
+                timeout=timeout_seconds,
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -95,7 +99,7 @@ class LLMService:
             raise ValueError("LLM response did not include a summary")
         return summary
 
-    def _summarize_with_grok(self, prompt: str) -> str:
+    def _summarize_with_grok(self, prompt: str, timeout_seconds: int) -> str:
         if not self.grok_api_key:
             raise RuntimeError("GROK_API_KEY is not configured")
 
@@ -120,7 +124,7 @@ class LLMService:
                     ],
                     "temperature": 0.2,
                 },
-                timeout=self.timeout_seconds,
+                timeout=timeout_seconds,
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -140,7 +144,7 @@ class LLMService:
             raise ValueError("Grok response did not include summary content")
         return summary
 
-    def _summarize_with_chatgpt(self, prompt: str) -> str:
+    def _summarize_with_chatgpt(self, prompt: str, timeout_seconds: int) -> str:
         if not self.gpt_api_key:
             raise RuntimeError("GPT_API_KEY is not configured")
 
@@ -165,7 +169,7 @@ class LLMService:
                     ],
                     "temperature": 0.2,
                 },
-                timeout=self.timeout_seconds,
+                timeout=timeout_seconds,
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:

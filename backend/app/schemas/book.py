@@ -33,6 +33,7 @@ class BookDetail(BaseModel):
     summary: Optional[str] = None
     summary_error: Optional[str] = None
     summary_status: BookSummaryStatus
+    is_borrowed_by_me: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -40,7 +41,7 @@ class BookDetail(BaseModel):
         from_attributes = True
 
     @classmethod
-    def from_orm_book(cls, book):
+    def from_orm_book(cls, book, is_borrowed_by_me: bool = False):
         return cls(
             id=str(book.id),
             title=book.title,
@@ -52,6 +53,7 @@ class BookDetail(BaseModel):
             summary=book.summary,
             summary_error=book.summary_error,
             summary_status=BookSummaryStatus(book.summary_status),
+            is_borrowed_by_me=is_borrowed_by_me,
             created_at=book.created_at,
             updated_at=book.updated_at,
         )

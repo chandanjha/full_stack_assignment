@@ -45,6 +45,28 @@ class BookBorrowRepository:
         )
         return list(result.scalars().all())
 
+    async def list_active_user_book_borrows(
+        self,
+        user_id: UUID,
+        book_ids: list[UUID] | None = None,
+    ) -> list[BookBorrow]:
+        if book_ids is not None and len(book_ids) == 0:
+            return []
+
+        query = (
+            select(BookBorrow)
+            .where(
+                BookBorrow.user_id == user_id,
+                BookBorrow.returned_at.is_(None),
+            )
+            .order_by(BookBorrow.borrowed_at.desc())
+        )
+        if book_ids is not None:
+            query = query.where(BookBorrow.book_id.in_(book_ids))
+
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def return_book_borrow(self, book_borrow: BookBorrow) -> BookBorrow:
         book_borrow.returned_at = datetime.utcnow()
         self.db.add(book_borrow)

@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, status
@@ -49,11 +50,31 @@ class BookService:
             raise
         return BookDetail.from_orm_book(book)
 
-    async def list_books(self, page: int, page_size: int) -> tuple[list[BookDetail], int]:
+    async def list_books(
+        self,
+        page: int,
+        page_size: int,
+        current_user_id: UUID | None = None,
+    ) -> tuple[list[BookDetail], int]:
         offset = (page - 1) * page_size
         books = await self.book_repo.list_books(offset=offset, limit=page_size)
         total = await self.book_repo.count_books()
-        return [BookDetail.from_orm_book(book) for book in books], total
+
+        active_borrowed_book_ids: set[UUID] = set()
+        if current_user_id and books:
+            active_borrows = await self.book_borrow_repo.list_active_user_book_borrows(
+                current_user_id,
+                [book.id for book in books],
+            )
+            active_borrowed_book_ids = {book_borrow.book_id for book_borrow in active_borrows}
+
+        return [
+            BookDetail.from_orm_book(
+                book,
+                is_borrowed_by_me=book.id in active_borrowed_book_ids,
+            )
+            for book in books
+        ], total
 
     async def update_book(self, book_id: UUID, payload: BookUpdate) -> BookDetail:
         book = await self._get_book_or_404(book_id)
@@ -103,7 +124,8 @@ class BookService:
 
         try:
             with self.storage.open_book_file(book.file_path) as book_file:
-                summary = self.summary_provider.generate_summary(
+                summary = await asyncio.to_thread(
+                    self.summary_provider.generate_summary,
                     book_file,
                     book.original_file_name or book.file_path,
                     book.mime_type,

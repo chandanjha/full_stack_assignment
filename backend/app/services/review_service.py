@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -56,7 +57,11 @@ class ReviewService:
     async def update_review_consensus(self, book_id: UUID) -> None:
         book = await self._get_book_or_404(book_id)
         reviews = await self.review_repo.list_book_reviews(book_id)
-        consensus = self.review_consensus_provider.summarize_reviews(book.title, reviews)
+        consensus = await asyncio.to_thread(
+            self.review_consensus_provider.summarize_reviews,
+            book.title,
+            reviews,
+        )
         await self.book_insight_repo.upsert_consensus(book_id, consensus)
 
     async def get_book_insight(self, book_id: UUID) -> BookInsightPublic:

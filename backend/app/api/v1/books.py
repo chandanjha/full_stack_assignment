@@ -72,11 +72,11 @@ async def list_books(
     page: int = 1,
     page_size: int = 10,
     service: BookService = Depends(get_book_service),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     safe_page = max(page, 1)
     safe_page_size = min(max(page_size, 1), 100)
-    books, total = await service.list_books(safe_page, safe_page_size)
+    books, total = await service.list_books(safe_page, safe_page_size, current_user.id)
     total_pages = ceil(total / safe_page_size) if total else 0
     return PaginatedSuccessResponse(
         message="Books fetched successfully",

@@ -1,3 +1,4 @@
+import asyncio
 from collections import Counter
 from uuid import UUID
 
@@ -63,7 +64,8 @@ class RecommendationService:
 
         top_tags = [tag for tag, _ in tag_scores.most_common(5)]
         top_authors = [author for author, _ in author_scores.most_common(5)]
-        preference_summary = self.recommendation_profile_provider.summarize_preferences(
+        preference_summary = await asyncio.to_thread(
+            self.recommendation_profile_provider.summarize_preferences,
             top_tags,
             top_authors,
             user_reviews,
@@ -87,6 +89,9 @@ class RecommendationService:
         generated_preference = await self.update_user_preferences(current_user.id)
         preferred_tags = generated_preference.preferred_tags
         preferred_authors = generated_preference.preferred_authors
+        preference_summary_for_ranking = (
+            generated_preference.preference_summary if (preferred_tags or preferred_authors) else None
+        )
 
         all_books = await self.book_repo.list_all_books()
         borrowed_book_ids = {
@@ -108,10 +113,11 @@ class RecommendationService:
             for book in all_books
             if book.id not in excluded_ids
         ]
-        ranked_candidates = self.recommendation_ranking_provider.rank_books(
+        ranked_candidates = await asyncio.to_thread(
+            self.recommendation_ranking_provider.rank_books,
             favorite_tags=preferred_tags,
             favorite_authors=preferred_authors,
-            preference_summary=generated_preference.preference_summary,
+            preference_summary=preference_summary_for_ranking,
             candidate_books=candidate_books,
             limit=safe_limit,
         )

@@ -178,6 +178,7 @@ class LocalRecommendationProfileProvider:
         favorite_authors: list[str],
         reviews: list,
     ) -> str:
+        has_history_signals = bool(favorite_tags or favorite_authors or reviews)
         review_signals = [
             f"{review.rating}/5 on book {review.book_id}: {(review.comment or 'No comment')[:120]}"
             for review in reviews[:5]
@@ -188,7 +189,7 @@ class LocalRecommendationProfileProvider:
             f"Recent review signals: {' | '.join(review_signals) or 'none'}"
         )
 
-        if settings.LLM_ENABLED:
+        if settings.LLM_ENABLED and has_history_signals:
             try:
                 return self.llm_service.summarize_preferences(context)
             except Exception:
@@ -270,6 +271,7 @@ class LocalRecommendationRankingProvider:
         favorite_tags_norm = [_normalize_term(t) for t in favorite_tags if str(t).strip()]
         favorite_authors_norm = [_normalize_term(a) for a in favorite_authors if str(a).strip()]
         preference_summary = (preference_summary or "").strip() or None
+        has_profile_signals = bool(favorite_tags_norm or favorite_authors_norm or preference_summary)
 
         fallback_rankings = self._rank_with_fallback(
             favorite_tags=favorite_tags_norm,
@@ -278,7 +280,7 @@ class LocalRecommendationRankingProvider:
             candidate_books=candidate_books,
         )
 
-        if not settings.LLM_ENABLED:
+        if not settings.LLM_ENABLED or not has_profile_signals:
             return fallback_rankings[:safe_limit]
 
         # Keep re-ranking pool bounded.

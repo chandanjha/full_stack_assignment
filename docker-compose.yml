@@ -57,7 +57,7 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend:/app
-      # prevents node_modules from being overwritten by host volume
+      # keep container dependencies separate from host bind mount
       - /app/node_modules
       # keeps Next build artifacts inside the container to avoid stale host-side chunks
       - /app/.next
